@@ -1,0 +1,5 @@
+{
+  "name": "Profitable Project Idea Generator",
+  "description": "An AI-powered application that generates profitable project ideas based on user interests. The app is in Arabic and uses the Gemini API to provide creative and relevant business concepts.",
+  "requestFramePermissions": []
+}
