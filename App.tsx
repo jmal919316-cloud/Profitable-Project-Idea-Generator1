@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import Header from './components/Header';
 import IdeaCard from './components/IdeaCard';
@@ -7,29 +6,50 @@ import Footer from './components/Footer';
 import { generateProjectIdeas } from './services/geminiService';
 import type { ProjectIdea } from './types';
 
+// Fix: Removed `declare global` block for `window.aistudio` as it was causing a redeclaration error.
+// The type is assumed to be provided by the execution environment.
+
 const App: React.FC = () => {
   const [prompt, setPrompt] = useState<string>('');
   const [ideas, setIdeas] = useState<ProjectIdea[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [hasGenerated, setHasGenerated] = useState<boolean>(false);
-  const [isApiKeyMissing, setIsApiKeyMissing] = useState<boolean>(false);
+  // Default to true, so we show the setup message until we confirm the key exists.
+  const [isApiKeyMissing, setIsApiKeyMissing] = useState<boolean>(true);
 
-  useEffect(() => {
-    // Proactively check for the API key on initial load.
-    if (!process.env.API_KEY) {
-      setIsApiKeyMissing(true);
+  const checkApiKey = useCallback(async () => {
+    try {
+      if (window.aistudio && typeof window.aistudio.hasSelectedApiKey === 'function') {
+        const hasKey = await window.aistudio.hasSelectedApiKey();
+        setIsApiKeyMissing(!hasKey);
+        if(hasKey) {
+            setError(null); // Clear previous API key errors if key is now present
+        }
+      } else {
+        // Fallback for environments where `aistudio` is not injected.
+        setIsApiKeyMissing(true);
+      }
+    } catch (e) {
+        console.error("Error checking for API key:", e);
+        setIsApiKeyMissing(true); // Assume missing if check fails
     }
   }, []);
+  
+  useEffect(() => {
+    // Check for API key on initial load.
+    checkApiKey();
+  }, [checkApiKey]);
 
   const handleAddApiKey = async () => {
     try {
-      // This function is provided by the execution environment (e.g., AI Studio).
-      await (window as any).aistudio.openSelectKey();
-      // After the dialog, we optimistically assume a key has been selected.
-      // The environment will inject the new key, and subsequent API calls will use it.
-      setIsApiKeyMissing(false);
-      setError(null); // Clear any previous errors.
+      if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
+        await window.aistudio.openSelectKey();
+        // After the user interacts with the dialog, re-run the check.
+        await checkApiKey();
+      } else {
+        setError("لا يمكن العثور على وظيفة إعداد مفتاح API. هل تعمل في بيئة مدعومة؟");
+      }
     } catch (e) {
       console.error("Error opening API key dialog:", e);
       setError("حدث خطأ أثناء محاولة فتح مربع حوار إعداد مفتاح API.");
@@ -37,6 +57,7 @@ const App: React.FC = () => {
   };
   
   const handleGenerateIdeas = useCallback(async () => {
+    await checkApiKey();
     if (!prompt.trim() || isLoading || isApiKeyMissing) return;
 
     setIsLoading(true);
@@ -47,7 +68,13 @@ const App: React.FC = () => {
       setIdeas(generatedIdeas);
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message);
+        // If the API call fails because of a bad or missing key, guide the user to re-select it.
+        if (err.message.includes('API key not valid') || err.message.includes('غير مُعد')) {
+             setError('مفتاح API غير صالح أو غير مُعد. يرجى إعداده مرة أخرى.');
+             setIsApiKeyMissing(true);
+        } else {
+            setError(err.message);
+        }
       } else {
         setError("حدث خطأ غير متوقع.");
       }
@@ -55,7 +82,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [prompt, isLoading, isApiKeyMissing]);
+  }, [prompt, isLoading, isApiKeyMissing, checkApiKey]);
 
   const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setPrompt(e.target.value);
