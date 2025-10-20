@@ -1,18 +1,26 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import type { ProjectIdea } from '../types';
 
-const API_KEY = process.env.API_KEY;
+// Lazily initialize the AI instance to avoid errors on module load if API_KEY is missing.
+let ai: GoogleGenAI | null = null;
 
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
-}
+const getAiInstance = (): GoogleGenAI => {
+  if (!ai) {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      // This error will be thrown when the function is called, and can be caught by the UI.
+      throw new Error("مفتاح API الخاص بـ Google AI غير مُعد. يرجى التأكد من إضافته كمتغير بيئة على منصة النشر (مثل Vercel).");
+    }
+    ai = new GoogleGenAI({ apiKey });
+  }
+  return ai;
+};
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 export const generateProjectIdeas = async (userInput: string): Promise<ProjectIdea[]> => {
   try {
-    const response = await ai.models.generateContent({
+    const aiInstance = getAiInstance(); // This will throw if API key is missing
+    const response = await aiInstance.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `بناءً على الاهتمامات التالية: "${userInput}"، قم بتوليد 5 أفكار مشاريع مربحة.`,
       config: {
